@@ -18,7 +18,7 @@ import argparse
 import json
 import math
 import os
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -55,7 +55,7 @@ load_dotenv(SCRIPT_DIR / ".env")
 
 
 def utc_now_iso() -> str:
-    return datetime.now(UTC).replace(microsecond=0).isoformat()
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 def normalize_ticker(ticker: str) -> str:
