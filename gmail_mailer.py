@@ -110,6 +110,7 @@ def gmail_setup_status() -> dict[str, object]:
 
 def save_token_from_oauth_flow() -> Path:
     from google_auth_oauthlib.flow import InstalledAppFlow
+    import webbrowser
 
     if not CREDENTIALS_PATH.exists():
         raise FileNotFoundError(
@@ -117,6 +118,10 @@ def save_token_from_oauth_flow() -> Path:
         )
 
     flow = InstalledAppFlow.from_client_secrets_file(str(CREDENTIALS_PATH), SCOPES)
-    creds = flow.run_local_server(port=0)
+    try:
+        webbrowser.get()
+        creds = flow.run_local_server(port=0)
+    except webbrowser.Error:
+        creds = flow.run_console()
     TOKEN_PATH.write_text(creds.to_json(), encoding="utf-8")
     return TOKEN_PATH
