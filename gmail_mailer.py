@@ -122,6 +122,14 @@ def save_token_from_oauth_flow() -> Path:
         webbrowser.get()
         creds = flow.run_local_server(port=0)
     except webbrowser.Error:
-        creds = flow.run_console()
+        auth_url, _ = flow.authorization_url(
+            access_type="offline",
+            prompt="consent",
+        )
+        print("Open this URL in your browser and approve access:")
+        print(auth_url)
+        auth_code = input("Paste the authorization code here: ").strip()
+        flow.fetch_token(code=auth_code)
+        creds = flow.credentials
     TOKEN_PATH.write_text(creds.to_json(), encoding="utf-8")
     return TOKEN_PATH
