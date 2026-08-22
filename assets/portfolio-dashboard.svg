@@ -1,0 +1,55 @@
+<svg width="1200" height="420" viewBox="0 0 1200 420" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">Portfolio Analyzer dashboard illustration</title>
+  <desc id="desc">A stylized stock chart dashboard with detector signals and portfolio metrics.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="420" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0F172A"/>
+      <stop offset="0.58" stop-color="#12385F"/>
+      <stop offset="1" stop-color="#0B6E69"/>
+    </linearGradient>
+    <linearGradient id="line" x1="150" y1="275" x2="940" y2="112" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#38BDF8"/>
+      <stop offset="0.48" stop-color="#22C55E"/>
+      <stop offset="1" stop-color="#FBBF24"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-30%" width="140%" height="160%" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#020617" flood-opacity="0.28"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="420" rx="34" fill="url(#bg)"/>
+  <path d="M0 337C129 285 228 308 350 260C514 195 596 119 763 147C924 174 1034 118 1200 58V420H0V337Z" fill="#FFFFFF" opacity="0.06"/>
+  <path d="M68 62H1132" stroke="#FFFFFF" stroke-opacity="0.12"/>
+  <path d="M68 344H1132" stroke="#FFFFFF" stroke-opacity="0.12"/>
+
+  <g filter="url(#shadow)">
+    <rect x="72" y="82" width="760" height="248" rx="22" fill="#F8FAFC"/>
+    <rect x="96" y="108" width="210" height="16" rx="8" fill="#CBD5E1"/>
+    <rect x="96" y="140" width="690" height="1" fill="#E2E8F0"/>
+    <path d="M111 278L177 250L243 260L309 214L375 229L441 185L507 196L573 162L639 174L705 130L771 146" stroke="#94A3B8" stroke-width="2" stroke-dasharray="5 8"/>
+    <path d="M111 280L177 253L243 264L309 218L375 225L441 190L507 194L573 155L639 166L705 122L771 134" stroke="url(#line)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="705" cy="122" r="12" fill="#FBBF24" stroke="#F8FAFC" stroke-width="5"/>
+    <rect x="111" y="296" width="92" height="12" rx="6" fill="#E2E8F0"/>
+    <rect x="247" y="296" width="92" height="12" rx="6" fill="#E2E8F0"/>
+    <rect x="383" y="296" width="92" height="12" rx="6" fill="#E2E8F0"/>
+    <rect x="519" y="296" width="92" height="12" rx="6" fill="#E2E8F0"/>
+    <rect x="655" y="296" width="92" height="12" rx="6" fill="#E2E8F0"/>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="862" y="82" width="266" height="248" rx="22" fill="#FFFFFF" fill-opacity="0.96"/>
+    <text x="890" y="126" fill="#0F172A" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="24" font-weight="800">Daily Signals</text>
+    <rect x="890" y="154" width="86" height="28" rx="14" fill="#DCFCE7"/>
+    <text x="909" y="174" fill="#15803D" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="800">LOW</text>
+    <rect x="990" y="154" width="95" height="28" rx="14" fill="#FEF3C7"/>
+    <text x="1007" y="174" fill="#B45309" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="13" font-weight="800">MEDIUM</text>
+
+    <rect x="890" y="206" width="210" height="12" rx="6" fill="#CBD5E1"/>
+    <rect x="890" y="230" width="162" height="10" rx="5" fill="#E2E8F0"/>
+    <rect x="890" y="258" width="210" height="12" rx="6" fill="#CBD5E1"/>
+    <rect x="890" y="282" width="184" height="10" rx="5" fill="#E2E8F0"/>
+  </g>
+
+  <text x="78" y="382" fill="#E0F2FE" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="22" font-weight="800">Portfolio Analyzer</text>
+  <text x="315" y="382" fill="#BAE6FD" fill-opacity="0.86" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="17" font-weight="600">Yahoo Finance signals + Gemini daily change summaries</text>
+</svg>

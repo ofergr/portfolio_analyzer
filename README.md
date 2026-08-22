@@ -1,113 +1,171 @@
-# Start Your Own
+# Portfolio Analyzer
 
-This folder lets you run the trading experiment on your own computer. It contains two small scripts and the CSV files they produce.
+![Portfolio Analyzer dashboard illustration](assets/portfolio-dashboard.svg)
 
-Run the commands below from the repository root. The scripts automatically
-save their CSV data inside this folder.
+A standalone Python script that monitors a personal stock watchlist, collects market context from Yahoo Finance, asks Gemini what materially changed, and optionally emails a copy-ready daily report through the Gmail API.
 
-## Overview
+The project does not read any portfolio CSV. The watchlist is created and maintained with `--add` and `--remove`.
 
- **Install dependencies:**
-   ```bash
-   # Recommended: Use a virtual environment
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   
-   pip install -r requirements.txt
-   ```
+## What It Does
 
-**Processing Portfolio:**
-   ```bash
-   # ALWAYS include a CSV file of history
+- Validates tickers against Yahoo Finance before adding them.
+- Allows NYSE and Nasdaq equities.
+- Stores the watchlist locally in `portfolio_monitor_state/watchlist.json`.
+- Collects price, volume, fundamentals, news, earnings dates, SEC filing, analyst, insider, valuation, technical, sector, and corporate action context.
+- Detects explicit breaks above or below the 50-day moving average.
+- Uses Gemini to summarize what changed without making buy/sell/hold recommendations.
+- Sends a single copy-ready HTML email with light color emphasis for readability.
 
-   python trading_script.py --data-dir "Start Your Own"
-   ```
+## Setup
 
-**To Save Prior Days:**
-   ```bash
+Create a virtual environment and install dependencies:
 
-   # Save data with specific date
-   python trading_script.py --asof 2025-08-27 --data-dir "Start Your Own"
-   ```
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
-**Generate performance graphs:**
-   ```bash
-   python "Start Your Own/Generate_Graph.py"
-   ```
+Create `.env` in the project folder:
 
-**Standalone monitor with Yahoo + Gemini:**
-   ```bash
-   pip install -r requirements.txt
+```env
+GEMINI_API_KEY=your_gemini_api_key_here
+SENDER_EMAIL=your-email@gmail.com
+RECIPIENTS=first@example.com,second@example.com
+```
 
-   # Put your keys/settings in .env
-   # GEMINI_API_KEY=your_key_here
-   # SENDER_EMAIL=your-email@gmail.com
-   # RECIPIENTS=your-email@gmail.com
+`GEMINI_API_KEY` is required for AI analysis. If it is missing, the script falls back to deterministic summaries.
 
-   # Add NYSE or Nasdaq symbols to the watchlist
-   python portfolio_monitor.py --add IBM --add KO
+`SENDER_EMAIL` and `RECIPIENTS` are required only when using `--email`.
 
-   # Review saved symbols
-   python portfolio_monitor.py --list
+## Gmail API
 
-   # Run the monitor
-   python portfolio_monitor.py
+Email sending uses the Gmail API, not SMTP.
 
-   # Optionally email the report through Gmail API
-   python portfolio_monitor.py --email
-   ```
+You need two local files:
 
-The monitor script is standalone and does not read this repo's portfolio CSV.
-It keeps its own local watchlist, validates `--add` symbols against Yahoo
-Finance, and only accepts tickers that appear to be listed on NYSE or Nasdaq.
+- `credentials.json`: OAuth desktop client downloaded from Google Cloud Console.
+- `token.json`: created after running the one-time Gmail OAuth flow.
 
-For Gmail API setup, see [GMAIL_API_SETUP.md](/Users/oferg/work/mycode/portfolio_analyzer/GMAIL_API_SETUP.md).
+Run:
 
-### Argument Table for 'Generate_Graph.py'
+```bash
+python3 authenticate_gmail.py
+```
 
-| Argument            | Type   | Default          | Description                                                        |
-|---------------------|--------|------------|--------------------------------------------------------------------------|
-| `--start-date`      | str    | Start date in CSV| Start date in `YYYY-MM-DD` format                                  |
-| `--end-date`        | str    | End date in CSV| End date in `YYYY-MM-DD` format                                      |
-| `--start-equity`    | float  | 100.0   | Baseline to index both series (default 100)                                 |
-| `--output`          | str    | —       | Optional path to save the chart (`.png` / `.jpg` / `.pdf`)                  |
+For the full setup flow, see [GMAIL_API_SETUP.md](/Users/oferg/work/mycode/portfolio_analyzer/GMAIL_API_SETUP.md).
 
-## ProcessPortfolio.py
+These files are secrets and are ignored by Git:
 
-### IMPORTANT
+- `.env`
+- `credentials.json`
+- `token.json`
+- `client_secret*.json`
 
-Always run the program after the market closes at 4:00 PM EST, otherwise it will default to using the previous day’s data.
+## Watchlist Commands
 
-Because the program relies on past data, orders for a given day are generated after that day’s trading session and must be placed on the following trading day. This prevents lookahead bias. For example, When I receive orders from ChatGPT, I run the program and input the orders the close the day after.  
+Add tickers:
 
-This script updates your portfolio and logs trades.
+```bash
+python3 portfolio_monitor.py --add RTX --add SNDK
+```
 
-**Information**
-   - The program uses past data from 'chatgpt_portfolio_update.csv' to automatically grab today's portfolio.
-   - If 'chatgpt_portfolio_update.csv' is empty (meaning no past trading days logged), you will required to enter your starting cash.
-   - From here, you can set up your portfolio or make any changes.
-   - The script asks if you want to record manual buys or sells.
-   - After you hit 'Enter' all calculations for the day are made.
-   - Results are saved to `chatgpt_portfolio_update.csv` and any trades are added to `chatgpt_trade_log.csv`.
-   - In the terminal, daily results are printed. Copy and paste results into the LLM.
-To automate prompts, check out the [Automation Guide](https://github.com/LuckyOne7777/ChatGPT-Micro-Cap-Experiment/blob/main/Other/AUTOMATION_README.md)
-## Generate_Graph.py
+Remove a ticker:
 
-This script draws a graph of your portfolio versus the S&P 500.
+```bash
+python3 portfolio_monitor.py --remove RTX
+```
 
-**Program will ALWAYS use 'Start Your Own/chatgpt_portfolio_update.csv' for data.**
+List current tickers:
 
-1. **Ensure you have portfolio data**
-   - Run `ProcessPortfolio.py` at least once so `chatgpt_portfolio_update.csv` has data.
+```bash
+python3 portfolio_monitor.py --list
+```
 
-2. **Run the graph script**
-   ```bash
-   python "Start Your Own/Generate_Graph.py" --start-equity 100
-   ```
-   
-3. **View the chart**
-   - A window opens showing your portfolio value vs. S&P 500. Results will be adjusted for baseline equity.
+Adding the same ticker more than once is safe. The watchlist is saved without duplicates.
 
-All of this is still VERY NEW, so there are bugs. Please reach out if you find an issue or have a question.
+## Run The Monitor
 
-Both scripts are designed for beginners, feel free to experiment and modify them as you learn.
+Print a report in the terminal:
+
+```bash
+python3 portfolio_monitor.py
+```
+
+Send the report by email:
+
+```bash
+python3 portfolio_monitor.py --email
+```
+
+Run without Gemini:
+
+```bash
+python3 portfolio_monitor.py --skip-ai
+```
+
+Use a different Gemini model:
+
+```bash
+python3 portfolio_monitor.py --model gemini-3.7-flash
+```
+
+Change the one-day price move threshold:
+
+```bash
+python3 portfolio_monitor.py --price-threshold 4
+```
+
+## Report Format
+
+The email is HTML, but the report body is intentionally one continuous text block so it can be copied into another AI chat.
+
+The HTML version adds light visual emphasis:
+
+- Ticker names and priority values are colored by urgency.
+- Section headers are bold and colored.
+- Positive percentages are green.
+- Negative percentages are red.
+
+The plain-text email body remains plain text.
+
+## Detectors
+
+The script currently collects these detector groups from Yahoo Finance / yfinance:
+
+- `Analyst Revisions`: EPS revisions, EPS trends, recommendation summaries, price targets, upgrades, and downgrades.
+- `Insider Transactions`: recent insider transaction and purchase data when Yahoo provides it.
+- `SEC Filings`: recent SEC filing metadata exposed by Yahoo.
+- `Valuation Changes`: valuation metrics and analyst target gap versus the latest close.
+- `Technical Indicators`: 20 DMA, 50 DMA, 50 DMA breaks, RSI, volatility, and distance from yearly high/low.
+- `Sector Performance`: 5-day relative move versus a sector ETF proxy.
+- `Corporate Actions`: recent dividends and splits.
+- `News Relevance`: lightweight headline classification by topic.
+
+Yahoo coverage varies by ticker. Some detector groups may be empty for some symbols.
+
+## Local State
+
+Generated state lives under:
+
+```text
+portfolio_monitor_state/
+```
+
+It contains:
+
+- `watchlist.json`: saved tickers.
+- `snapshots/`: prior fundamental snapshots used for change detection.
+- `raw/`: latest structured context per ticker.
+- `reports/`: saved report payloads.
+
+This directory is ignored by Git.
+
+## Server Cron Example
+
+Example cron for running at 14:00 Israel time, Sunday through Friday:
+
+```cron
+CRON_TZ=Asia/Jerusalem
+0 14 * * 0-5 /root/scripts/portfolio_analyzer/.venv/bin/python /root/scripts/portfolio_analyzer/portfolio_monitor.py --email >> /root/scripts/portfolio_analyzer/cron.log 2>&1
+```
