@@ -44,7 +44,7 @@ save their CSV data inside this folder.
    # SENDER_EMAIL=your-email@gmail.com
    # RECIPIENTS=your-email@gmail.com
 
-   # Add NYSE-listed symbols to the watchlist
+   # Add NYSE or Nasdaq symbols to the watchlist
    python portfolio_monitor.py --add IBM --add KO
 
    # Review saved symbols
@@ -59,7 +59,7 @@ save their CSV data inside this folder.
 
 The monitor script is standalone and does not read this repo's portfolio CSV.
 It keeps its own local watchlist, validates `--add` symbols against Yahoo
-Finance, and only accepts tickers that appear to be listed on NYSE.
+Finance, and only accepts tickers that appear to be listed on NYSE or Nasdaq.
 
 For Gmail API setup, see [GMAIL_API_SETUP.md](/Users/oferg/work/mycode/portfolio_analyzer/GMAIL_API_SETUP.md).
 
