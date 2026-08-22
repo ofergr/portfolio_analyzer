@@ -174,6 +174,21 @@ def extract_news_items(raw_news: list[dict[str, Any]], limit: int = 5) -> list[d
     return items
 
 
+def to_json_safe(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(k): to_json_safe(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [to_json_safe(v) for v in value]
+    if isinstance(value, tuple):
+        return [to_json_safe(v) for v in value]
+    if hasattr(value, "isoformat") and callable(value.isoformat):
+        try:
+            return value.isoformat()
+        except Exception:
+            pass
+    return value
+
+
 def detect_price_event(history: pd.DataFrame, threshold_pct: float) -> dict[str, Any]:
     if history.empty or len(history.index) < 2:
         return {"triggered": False, "reason": "Not enough price history"}
@@ -293,6 +308,7 @@ def fetch_yahoo_context(ticker: str, state_dir: Path, price_threshold_pct: float
             "history_period": "3mo",
         },
     }
+    context = to_json_safe(context)
 
     (state_dir / RAW_DIR / f"{ticker}.json").write_text(
         json.dumps(context, indent=2) + "\n",
