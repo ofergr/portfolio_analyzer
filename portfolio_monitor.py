@@ -5,7 +5,7 @@ portfolio CSV files, so you can copy it to another machine and use it there.
 
 Core workflow:
 - `--add TICKER` validates the symbol on Yahoo Finance and only saves it if it
-  appears to be listed on NYSE or Nasdaq.
+  appears to be a stock or ETF listed on NYSE or Nasdaq.
 - `--remove TICKER` removes it from the local watchlist.
 - Normal runs fetch Yahoo Finance price/fundamental/news data for saved tickers,
   compare against prior snapshots, and ask Gemini to explain what actually
@@ -646,7 +646,7 @@ def validate_allowed_ticker(ticker: str) -> tuple[bool, str, dict[str, Any] | No
         detail = full_exchange_name or exchange or "unknown exchange"
         return False, f"{symbol} resolved, but Yahoo reports it as {detail}, not NYSE or Nasdaq.", info
 
-    if quote_type not in {"EQUITY", ""}:
+    if quote_type not in {"EQUITY", "ETF", ""}:
         return False, f"{symbol} is listed on an allowed exchange but its Yahoo quote type is {quote_type}, not an equity.", info
 
     return True, f"{symbol} validated on an allowed exchange ({long_name}).", info
