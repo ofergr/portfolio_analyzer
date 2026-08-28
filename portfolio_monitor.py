@@ -15,11 +15,14 @@ Core workflow:
 from __future__ import annotations
 
 import argparse
+import asyncio
 import html
 import json
 import math
 import os
 import re
+import urllib.error
+import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -32,7 +35,11 @@ from gmail_mailer import send_email_via_gmail_api
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_STATE_DIR = SCRIPT_DIR / "portfolio_monitor_state"
-DEFAULT_MODEL = "gemini-3.7-flash"
+DEFAULT_AI_PROVIDER = "cline"
+DEFAULT_GEMINI_MODEL = "gemini-3.7-flash"
+DEFAULT_CLINE_MODEL = "google/gemini-2.5-pro"
+CLINE_CHAT_COMPLETIONS_URL = "https://api.cline.bot/api/v1/chat/completions"
+DEFAULT_MAX_CONCURRENT_TICKERS = 4
 WATCHLIST_FILE = "watchlist.json"
 REPORTS_DIR = "reports"
 SNAPSHOTS_DIR = "snapshots"
@@ -774,19 +781,13 @@ def default_analysis(context: dict[str, Any]) -> dict[str, Any]:
     return {
         "priority": priority,
         "what_changed": changes[:3],
-        "why_it_matters": (
-            "This is a deterministic fallback summary because Gemini analysis was skipped "
-            "or unavailable."
-        ),
+        "why_it_matters": "This is a deterministic fallback summary because AI analysis was skipped or unavailable.",
         "what_to_review": review[:2],
     }
 
 
-def analyze_with_gemini(context: dict[str, Any], api_key: str, model: str) -> dict[str, Any]:
-    from google import genai
-
-    client = genai.Client(api_key=api_key)
-    prompt = f"""
+def build_analysis_prompt(context: dict[str, Any]) -> str:
+    return f"""
 You are monitoring a long-term equity watchlist.
 Do NOT recommend BUY, SELL, or HOLD.
 Do NOT predict future prices.
@@ -822,9 +823,87 @@ Context:
 {json.dumps(context, indent=2)}
 """.strip()
 
+
+def analyze_with_gemini(context: dict[str, Any], api_key: str, model: str) -> dict[str, Any]:
+    from google import genai
+
+    client = genai.Client(api_key=api_key)
+    prompt = build_analysis_prompt(context)
     chat = client.chats.create(model=model)
     response = chat.send_message(prompt)
     return extract_json_object(response.text or "")
+
+
+def analyze_with_cline(context: dict[str, Any], api_key: str, model: str) -> dict[str, Any]:
+    payload = {
+        "model": model,
+        "stream": False,
+        "messages": [
+            {
+                "role": "user",
+                "content": build_analysis_prompt(context),
+            }
+        ],
+    }
+    request = urllib.request.Request(
+        CLINE_CHAT_COMPLETIONS_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "X-Title": "Portfolio Analyzer",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            response_payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        error_body = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Cline API error {exc.code}: {error_body}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"Cline API request failed: {exc.reason}") from exc
+
+    response_data = response_payload.get("data", response_payload)
+    choices = response_data.get("choices", [])
+    if not choices:
+        raise RuntimeError("Cline API response did not include choices.")
+    message = choices[0].get("message", {})
+    return extract_json_object(message.get("content") or "")
+
+
+def resolve_ai_settings(provider_arg: str | None, model_arg: str | None) -> tuple[str, str, str | None]:
+    provider = (provider_arg or os.getenv("AI_PROVIDER") or DEFAULT_AI_PROVIDER).strip().lower()
+    if provider == "cline":
+        model = model_arg or os.getenv("AI_MODEL") or os.getenv("CLINE_MODEL") or DEFAULT_CLINE_MODEL
+        return provider, model, os.getenv("CLINE_API_KEY")
+    if provider == "gemini":
+        model = model_arg or os.getenv("AI_MODEL") or os.getenv("GEMINI_MODEL") or DEFAULT_GEMINI_MODEL
+        return provider, model, os.getenv("GEMINI_API_KEY")
+    raise ValueError(f"Unsupported AI provider: {provider}. Use 'gemini' or 'cline'.")
+
+
+def resolve_fallback_ai_settings(primary_provider: str) -> tuple[str, str, str | None] | None:
+    fallback_provider = (os.getenv("AI_FALLBACK_PROVIDER") or "").strip().lower()
+    if not fallback_provider and primary_provider == "cline":
+        fallback_provider = "gemini"
+    if not fallback_provider or fallback_provider == primary_provider:
+        return None
+    if fallback_provider == "gemini":
+        model = os.getenv("AI_FALLBACK_MODEL") or os.getenv("GEMINI_MODEL") or DEFAULT_GEMINI_MODEL
+        return fallback_provider, model, os.getenv("GEMINI_API_KEY")
+    if fallback_provider == "cline":
+        model = os.getenv("AI_FALLBACK_MODEL") or os.getenv("CLINE_MODEL") or DEFAULT_CLINE_MODEL
+        return fallback_provider, model, os.getenv("CLINE_API_KEY")
+    raise ValueError(f"Unsupported fallback AI provider: {fallback_provider}. Use 'gemini' or 'cline'.")
+
+
+def analyze_with_ai(context: dict[str, Any], provider: str, api_key: str, model: str) -> dict[str, Any]:
+    if provider == "cline":
+        return analyze_with_cline(context, api_key, model)
+    if provider == "gemini":
+        return analyze_with_gemini(context, api_key, model)
+    raise ValueError(f"Unsupported AI provider: {provider}")
 
 
 def format_report_section(ticker: str, analysis: dict[str, Any]) -> str:
@@ -1098,46 +1177,151 @@ def print_watchlist(state_dir: Path) -> int:
     return 0
 
 
-def run_monitor(state_dir: Path, model: str, price_threshold_pct: float, skip_ai: bool, send_email: bool) -> int:
+def priority_sort_key(ticker: str, item: dict[str, Any]) -> tuple[int, str]:
+    priority_order = {"HIGH": 0, "MEDIUM": 1, "LOW": 2}
+    priority = str(item.get("analysis", {}).get("priority", "LOW")).upper()
+    return priority_order.get(priority, 3), ticker
+
+
+def analyze_ticker_report_item(
+    ticker: str,
+    state_dir: Path,
+    price_threshold_pct: float,
+    skip_ai: bool,
+    provider: str,
+    resolved_model: str,
+    api_key: str | None,
+    fallback_settings: tuple[str, str, str | None] | None,
+) -> tuple[str, dict[str, Any], list[str]]:
+    messages: list[str] = []
+    context = fetch_yahoo_context(ticker, state_dir, price_threshold_pct)
+    if skip_ai:
+        analysis = default_analysis(context)
+    else:
+        ai_errors: list[str] = []
+        analysis = None
+        if api_key:
+            try:
+                analysis = analyze_with_ai(context, provider, api_key, resolved_model)
+            except Exception as exc:
+                ai_errors.append(f"{provider.title()} error: {exc}")
+        else:
+            required_key = "CLINE_API_KEY" if provider == "cline" else "GEMINI_API_KEY"
+            ai_errors.append(f"{required_key} is not set.")
+
+        if analysis is None and fallback_settings:
+            fallback_provider, fallback_model, fallback_api_key = fallback_settings
+            if fallback_api_key:
+                try:
+                    analysis = analyze_with_ai(context, fallback_provider, fallback_api_key, fallback_model)
+                    messages.append(f"Used {fallback_provider} fallback for {ticker}.")
+                except Exception as exc:
+                    ai_errors.append(f"{fallback_provider.title()} fallback error: {exc}")
+            else:
+                required_key = "CLINE_API_KEY" if fallback_provider == "cline" else "GEMINI_API_KEY"
+                ai_errors.append(f"{required_key} fallback key is not set.")
+
+        if analysis is None:
+            analysis = default_analysis(context)
+            analysis["why_it_matters"] += " " + " ".join(ai_errors)
+
+    return ticker, {"context": context, "analysis": analysis}, messages
+
+
+async def analyze_tickers_concurrently(
+    tickers: list[str],
+    state_dir: Path,
+    price_threshold_pct: float,
+    skip_ai: bool,
+    provider: str,
+    resolved_model: str,
+    api_key: str | None,
+    fallback_settings: tuple[str, str, str | None] | None,
+    max_concurrent_tickers: int,
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    semaphore = asyncio.Semaphore(max(1, max_concurrent_tickers))
+
+    async def run_one(ticker: str) -> tuple[str, dict[str, Any], list[str]]:
+        async with semaphore:
+            return await asyncio.to_thread(
+                analyze_ticker_report_item,
+                ticker,
+                state_dir,
+                price_threshold_pct,
+                skip_ai,
+                provider,
+                resolved_model,
+                api_key,
+                fallback_settings,
+            )
+
+    results = await asyncio.gather(*(run_one(ticker) for ticker in tickers))
+    items = {ticker: item for ticker, item, _messages in results}
+    messages = [message for _ticker, _item, result_messages in results for message in result_messages]
+    return items, messages
+
+
+def run_monitor(
+    state_dir: Path,
+    ai_provider: str | None,
+    model: str | None,
+    price_threshold_pct: float,
+    skip_ai: bool,
+    send_email: bool,
+    max_concurrent_tickers: int,
+) -> int:
     ensure_state_dirs(state_dir)
     tickers = load_watchlist(state_dir)
     if not tickers:
         print("Watchlist is empty. Add tickers first with --add.")
         return 1
 
-    api_key = os.getenv("GEMINI_API_KEY")
+    try:
+        provider, resolved_model, api_key = resolve_ai_settings(ai_provider, model)
+        fallback_settings = resolve_fallback_ai_settings(provider)
+    except ValueError as exc:
+        print(exc)
+        return 1
+
+    items, messages = asyncio.run(
+        analyze_tickers_concurrently(
+            tickers=tickers,
+            state_dir=state_dir,
+            price_threshold_pct=price_threshold_pct,
+            skip_ai=skip_ai,
+            provider=provider,
+            resolved_model=resolved_model,
+            api_key=api_key,
+            fallback_settings=fallback_settings,
+            max_concurrent_tickers=max_concurrent_tickers,
+        )
+    )
+    sorted_tickers = sorted(tickers, key=lambda ticker: priority_sort_key(ticker, items[ticker]))
+
     report_payload: dict[str, Any] = {
         "generated_at": utc_now_iso(),
-        "tickers": tickers,
-        "items": {},
-    }
-    rendered_sections: list[str] = []
-
-    for ticker in tickers:
-        context = fetch_yahoo_context(ticker, state_dir, price_threshold_pct)
-        if skip_ai or not api_key:
-            analysis = default_analysis(context)
-        else:
-            try:
-                analysis = analyze_with_gemini(context, api_key, model)
-            except Exception as exc:
-                analysis = default_analysis(context)
-                analysis["why_it_matters"] += f" Gemini error: {exc}"
-
-        report_payload["items"][ticker] = {
-            "context": context,
-            "analysis": analysis,
+        "tickers": sorted_tickers,
+        "ai_provider": provider,
+        "ai_model": resolved_model,
+        "ai_fallback": {
+            "provider": fallback_settings[0],
+            "model": fallback_settings[1],
         }
-        rendered_sections.append(format_report_section(ticker, analysis))
+        if fallback_settings
+        else None,
+        "items": items,
+    }
+    rendered_sections = [
+        format_report_section(ticker, report_payload["items"][ticker]["analysis"]) for ticker in sorted_tickers
+    ]
 
     report_path = state_dir / REPORTS_DIR / f"portfolio-monitor-{datetime.now().strftime('%Y%m%d-%H%M%S')}.json"
     report_path.write_text(json.dumps(report_payload, indent=2) + "\n", encoding="utf-8")
 
+    for message in messages:
+        print(message)
     print("\n\n".join(rendered_sections))
     print(f"\nSaved report: {report_path}")
-    if not api_key and not skip_ai:
-        print("Gemini was not used because GEMINI_API_KEY is not set.")
-
     if send_email:
         html_report = build_html_report(report_payload)
         plain_text_report = build_plain_text_report(report_payload)
@@ -1152,11 +1336,18 @@ def run_monitor(state_dir: Path, model: str, price_threshold_pct: float, skip_ai
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Standalone portfolio monitor using Yahoo Finance and Gemini")
+    parser = argparse.ArgumentParser(description="Standalone portfolio monitor using Yahoo Finance and AI analysis")
     parser.add_argument("--state-dir", default=str(DEFAULT_STATE_DIR), help="Directory for watchlist, snapshots, and reports")
-    parser.add_argument("--model", default=DEFAULT_MODEL, help="Gemini model name")
+    parser.add_argument("--ai-provider", choices=["gemini", "cline"], help="AI provider to use; defaults to AI_PROVIDER or cline")
+    parser.add_argument("--model", help="AI model name; defaults depend on the selected provider")
     parser.add_argument("--price-threshold", type=float, default=5.0, help="One-day move threshold that counts as unusual")
-    parser.add_argument("--skip-ai", action="store_true", help="Run deterministic change detection without Gemini")
+    parser.add_argument(
+        "--max-concurrent-tickers",
+        type=int,
+        default=DEFAULT_MAX_CONCURRENT_TICKERS,
+        help="Maximum tickers to fetch/analyze at the same time",
+    )
+    parser.add_argument("--skip-ai", action="store_true", help="Run deterministic change detection without AI")
     parser.add_argument("--email", action="store_true", help="Send the generated report via Gmail API")
     parser.add_argument("--add", action="append", default=[], help="Add a NYSE or Nasdaq ticker to the local watchlist")
     parser.add_argument("--remove", action="append", default=[], help="Remove a ticker from the local watchlist")
@@ -1176,10 +1367,12 @@ def main() -> int:
 
     return run_monitor(
         state_dir=state_dir,
+        ai_provider=args.ai_provider,
         model=args.model,
         price_threshold_pct=args.price_threshold,
         skip_ai=args.skip_ai,
         send_email=args.email,
+        max_concurrent_tickers=args.max_concurrent_tickers,
     )
 
 

@@ -2,7 +2,7 @@
 
 ![Portfolio Analyzer dashboard illustration](assets/portfolio-dashboard.svg)
 
-A standalone Python script that monitors a personal stock watchlist, collects market context from Yahoo Finance, asks Gemini what materially changed, and optionally emails a copy-ready daily report through the Gmail API.
+A standalone Python script that monitors a personal stock watchlist, collects market context from Yahoo Finance, asks an AI model what materially changed, and optionally emails a copy-ready daily report through the Gmail API.
 
 The project does not read any portfolio CSV. The watchlist is created and maintained with `--add` and `--remove`.
 
@@ -13,7 +13,9 @@ The project does not read any portfolio CSV. The watchlist is created and mainta
 - Stores the watchlist locally in `portfolio_monitor_state/watchlist.json`.
 - Collects price, volume, fundamentals, news, earnings dates, SEC filing, analyst, insider, valuation, technical, sector, and corporate action context.
 - Detects explicit breaks above or below the 50-day moving average.
-- Uses Gemini to summarize what changed without making buy/sell/hold recommendations.
+- Uses Gemini or Cline to summarize what changed without making buy/sell/hold recommendations.
+- Processes multiple tickers concurrently for faster daily runs.
+- Sorts the final report by priority from `HIGH` to `MEDIUM` to `LOW`.
 - Sends a single copy-ready HTML email with light color emphasis for readability.
 
 ## Setup
@@ -29,12 +31,35 @@ pip install -r requirements.txt
 Create `.env` in the project folder:
 
 ```env
-GEMINI_API_KEY=your_gemini_api_key_here
+AI_PROVIDER=cline
+AI_MODEL=google/gemini-2.5-pro
+CLINE_API_KEY=your_cline_api_key_here
+GEMINI_API_KEY=your_direct_gemini_fallback_key_here
 SENDER_EMAIL=your-email@gmail.com
 RECIPIENTS=first@example.com,second@example.com
 ```
 
-`GEMINI_API_KEY` is required for AI analysis. If it is missing, the script falls back to deterministic summaries.
+`AI_PROVIDER` can be `cline` or `gemini`. If it is omitted, the script uses `cline`.
+
+The default Cline model is `google/gemini-2.5-pro`, which uses Cline credits. Direct Gemini is treated as the fallback path.
+
+For Cline:
+
+```env
+AI_PROVIDER=cline
+AI_MODEL=google/gemini-2.5-pro
+CLINE_API_KEY=your_cline_api_key_here
+```
+
+For direct Gemini:
+
+```env
+AI_PROVIDER=gemini
+AI_MODEL=gemini-3.7-flash
+GEMINI_API_KEY=your_gemini_api_key_here
+```
+
+If Cline is selected and `CLINE_API_KEY` is missing or fails, the script tries direct Gemini when `GEMINI_API_KEY` is configured. If no AI provider is available, it falls back to deterministic summaries.
 
 `SENDER_EMAIL` and `RECIPIENTS` are required only when using `--email`.
 
@@ -104,10 +129,10 @@ Run without Gemini:
 python3 portfolio_monitor.py --skip-ai
 ```
 
-Use a different Gemini model:
+Use a different AI provider or model:
 
 ```bash
-python3 portfolio_monitor.py --model gemini-3.7-flash
+python3 portfolio_monitor.py --ai-provider cline --model google/gemini-2.5-pro
 ```
 
 Change the one-day price move threshold:
@@ -116,9 +141,17 @@ Change the one-day price move threshold:
 python3 portfolio_monitor.py --price-threshold 4
 ```
 
+Tune concurrent ticker processing:
+
+```bash
+python3 portfolio_monitor.py --max-concurrent-tickers 4
+```
+
 ## Report Format
 
 The email is HTML, but the report body is intentionally one continuous text block so it can be copied into another AI chat.
+
+Tickers are sorted by urgency, with `HIGH` priority items first.
 
 The HTML version adds light visual emphasis:
 
@@ -163,9 +196,9 @@ This directory is ignored by Git.
 
 ## Server Cron Example
 
-Example cron for running at 14:00 Israel time, Sunday through Friday:
+Example cron for running at 14:00 Israel time, Monday through Friday:
 
 ```cron
 CRON_TZ=Asia/Jerusalem
-0 14 * * 0-5 /root/scripts/portfolio_analyzer/.venv/bin/python /root/scripts/portfolio_analyzer/portfolio_monitor.py --email >> /root/scripts/portfolio_analyzer/cron.log 2>&1
+0 14 * * 1-5 /root/scripts/portfolio_analyzer/.venv/bin/python /root/scripts/portfolio_analyzer/portfolio_monitor.py --email >> /root/scripts/portfolio_analyzer/cron.log 2>&1
 ```
