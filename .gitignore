@@ -7,3 +7,4 @@ portfolio_monitor_state/
 __pycache__/
 *.pyc
 .DS_Store
+cron.log

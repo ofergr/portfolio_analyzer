@@ -529,14 +529,16 @@ def collect_detectors(
     fundamental_changes: dict[str, float],
     recent_news: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    is_etf = str(info.get("quoteType", "")).upper() == "ETF"
+    na = {"available": False, "signals": ["Not applicable for ETFs."]}
     return {
-        "analyst_revisions": detect_analyst_activity(instrument),
-        "insider_transactions": detect_insider_activity(instrument),
-        "sec_filings": detect_sec_filings(instrument),
+        "analyst_revisions": na if is_etf else detect_analyst_activity(instrument),
+        "insider_transactions": na if is_etf else detect_insider_activity(instrument),
+        "sec_filings": na if is_etf else detect_sec_filings(instrument),
         "valuation_changes": detect_valuation(info, fundamental_changes, price_event),
         "technical_indicators": detect_technical_indicators(history),
         "sector_performance": detect_sector_performance(info.get("sector"), history),
-        "corporate_actions": detect_corporate_actions(instrument),
+        "corporate_actions": na if is_etf else detect_corporate_actions(instrument),
         "news_relevance": classify_news_relevance(recent_news),
     }
 
