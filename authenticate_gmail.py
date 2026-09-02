@@ -1,19 +1,31 @@
 #!/usr/bin/env python3
-"""One-time Gmail API OAuth setup for portfolio_analyzer."""
+"""Gmail setup check for portfolio_analyzer.
+
+This project now sends mail via Gmail SMTP with an App Password (no OAuth).
+Setup steps:
+  1. Enable 2-Step Verification on the SENDER_EMAIL account.
+  2. Create an App Password: https://myaccount.google.com/apppasswords
+  3. Put these in .env:
+       SENDER_EMAIL=you@gmail.com
+       GMAIL_APP_PASSWORD=xxxxxxxxxxxxxxxx
+       RECIPIENTS=a@example.com,b@example.com
+"""
 
 from __future__ import annotations
 
-from gmail_mailer import CREDENTIALS_PATH, save_token_from_oauth_flow
+import json
+
+from gmail_mailer import gmail_setup_status
 
 
 def main() -> int:
-    if not CREDENTIALS_PATH.exists():
-        print(f"credentials.json not found: {CREDENTIALS_PATH}")
-        print("Download an OAuth Desktop App client from Google Cloud Console and place it here.")
+    status = gmail_setup_status()
+    print(json.dumps(status, indent=2))
+    ok = status["sender_email_configured"] and status["app_password_configured"] and status["recipient_count"]
+    if not ok:
+        print("\nIncomplete. See the setup steps in this file's docstring.")
         return 1
-
-    token_path = save_token_from_oauth_flow()
-    print(f"Gmail authentication successful. Token saved to: {token_path}")
+    print("\nGmail SMTP config looks complete.")
     return 0
 
 

@@ -1,6 +1,8 @@
-# Gmail API Setup
+# Gmail Email Setup
 
-This project can send the daily portfolio report through the Gmail API.
+This project sends the daily portfolio report through Gmail SMTP using an
+**App Password**. There is no OAuth flow and no Google Cloud project — the App
+Password does not expire the way OAuth refresh tokens do.
 
 ## 1. Install dependencies
 
@@ -8,46 +10,36 @@ This project can send the daily portfolio report through the Gmail API.
 pip install -r requirements.txt
 ```
 
-## 2. Fill in `.env`
+## 2. Create a Gmail App Password
+
+1. Enable **2-Step Verification** on the sender Gmail account.
+2. Go to <https://myaccount.google.com/apppasswords>.
+3. Create a new App Password (name it anything, e.g. `portfolio-monitor`).
+4. Copy the 16-character password.
+
+## 3. Fill in `.env`
 
 Edit `.env` in this folder:
 
 ```env
 GEMINI_API_KEY=your_gemini_api_key_here
 SENDER_EMAIL=your-email@gmail.com
+GMAIL_APP_PASSWORD=xxxxxxxxxxxxxxxx
 RECIPIENTS=first@example.com,second@example.com
 ```
 
 Notes:
-- `SENDER_EMAIL` should be the Gmail account that will send the report.
-- `RECIPIENTS` can include your own Gmail address.
+- `SENDER_EMAIL` is the Gmail account that sends (and logs in to) SMTP.
+- `GMAIL_APP_PASSWORD` — spaces are stripped automatically, so paste as-is.
+- `RECIPIENTS` is comma-separated and can include your own address.
 
-## 3. Create Google Cloud credentials
-
-As of August 22, 2026, the standard Gmail API desktop-app flow is:
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/).
-2. Create a project.
-3. Enable the [Gmail API](https://developers.google.com/workspace/gmail/api/quickstart/python).
-4. Configure the Google Auth platform / OAuth consent screen.
-5. Create an OAuth client of type `Desktop app`.
-6. Download the client file and save it in this folder as `credentials.json`.
-
-You do not need to change anything special inside Gmail itself for the API path beyond using a Gmail-enabled Google account.
-
-## 4. Run one-time authentication
+## 4. Verify the config
 
 ```bash
 python3 authenticate_gmail.py
 ```
 
-This will:
-- open a browser,
-- ask you to sign in to the sender Gmail account,
-- ask for permission to send mail,
-- create `token.json` in this folder.
-
-If you authenticate on another machine, copy both `credentials.json` and `token.json` back into this project folder.
+Prints the setup status and reports whether the config is complete.
 
 ## 5. Send the report
 
@@ -55,35 +47,12 @@ If you authenticate on another machine, copy both `credentials.json` and `token.
 python3 portfolio_monitor.py --email
 ```
 
-That will:
-- run the monitor,
-- build the HTML report,
-- send it through Gmail API to the addresses in `RECIPIENTS`.
-
-## Files used
-
-- `credentials.json`: downloaded from Google Cloud Console
-- `token.json`: created after OAuth login
-- `.env`: sender and recipient configuration
-
-## SMTP vs Gmail API
-
-This project now uses Gmail API, not Gmail SMTP.
-
-That means:
-- you do not need a Gmail App Password,
-- you do not need to enable “less secure apps,”
-- you do need the Google Cloud OAuth setup above.
+Runs the monitor, builds the HTML report, and sends it via
+`smtp.gmail.com:587` to the addresses in `RECIPIENTS`.
 
 ## Troubleshooting
 
-If sending fails:
-
-1. Confirm `credentials.json` exists in this folder.
-2. Confirm `token.json` exists in this folder.
-3. Confirm `.env` has `SENDER_EMAIL` and `RECIPIENTS`.
-4. If the token is stale or revoked, delete `token.json` and run:
-
-```bash
-python3 authenticate_gmail.py
-```
+- **`GMAIL_APP_PASSWORD is not configured`** — add it to `.env`.
+- **`535 ... Username and Password not accepted`** — 2-Step Verification is off,
+  or the App Password is wrong/revoked. Generate a new one.
+- **`SENDER_EMAIL` / `RECIPIENTS` errors** — fill those keys in `.env`.

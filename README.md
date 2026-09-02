@@ -2,7 +2,7 @@
 
 ![Portfolio Analyzer dashboard illustration](assets/portfolio-dashboard.svg)
 
-A standalone Python script that monitors a personal stock watchlist, collects market context from Yahoo Finance, asks an AI model what materially changed, and optionally emails a copy-ready daily report through the Gmail API.
+A standalone Python script that monitors a personal stock watchlist, collects market context from Yahoo Finance, asks an AI model what materially changed, and optionally emails a copy-ready daily report through Gmail SMTP.
 
 The project does not read any portfolio CSV. The watchlist is created and maintained with `--add` and `--remove`.
 
@@ -63,29 +63,25 @@ If Cline is selected and `CLINE_API_KEY` is missing or fails, the script tries d
 
 `SENDER_EMAIL` and `RECIPIENTS` are required only when using `--email`.
 
-## Gmail API
+## Gmail email
 
-Email sending uses the Gmail API, not SMTP.
+Email sending uses Gmail SMTP with an App Password (no OAuth, no Google Cloud project).
 
-You need two local files:
+Add to `.env`:
 
-- `credentials.json`: OAuth desktop client downloaded from Google Cloud Console.
-- `token.json`: created after running the one-time Gmail OAuth flow.
+- `SENDER_EMAIL`: the sending Gmail address
+- `GMAIL_APP_PASSWORD`: a 16-char App Password from <https://myaccount.google.com/apppasswords> (requires 2-Step Verification)
+- `RECIPIENTS`: comma-separated recipient list
 
-Run:
+Verify with:
 
 ```bash
 python3 authenticate_gmail.py
 ```
 
-For the full setup flow, see [GMAIL_API_SETUP.md](/Users/oferg/work/mycode/portfolio_analyzer/GMAIL_API_SETUP.md).
+For the full setup flow, see [GMAIL_API_SETUP.md](GMAIL_API_SETUP.md).
 
-These files are secrets and are ignored by Git:
-
-- `.env`
-- `credentials.json`
-- `token.json`
-- `client_secret*.json`
+`.env` holds secrets and is ignored by Git.
 
 ## Watchlist Commands
 
