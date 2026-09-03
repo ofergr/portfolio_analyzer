@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 import smtplib
 import ssl
+import time
 from email.message import EmailMessage
 from pathlib import Path
 from typing import Iterable
@@ -26,6 +27,12 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 ENV_PATH = SCRIPT_DIR / ".env"
 SMTP_HOST = "smtp.gmail.com"
 SMTP_PORT = 587
+SMTP_SSL_PORT = 465
+SMTP_TIMEOUT = 30
+# Gmail occasionally answers a fresh connection with a transient
+# "421 4.4.5 Server busy, try again later" - retry with backoff before giving up.
+SMTP_MAX_ATTEMPTS = 5
+SMTP_RETRY_BACKOFF = 15  # seconds, multiplied by the attempt number
 
 load_dotenv(ENV_PATH)
 
@@ -65,28 +72,64 @@ def send_email_via_gmail_api(
         raise RuntimeError("RECIPIENTS is not configured in .env")
 
     context = ssl.create_default_context()
-    sent_to: list[str] = []
 
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-        server.starttls(context=context)
-        server.login(sender_email, app_password)
+    def _deliver() -> list[str]:
+        sent_to: list[str] = []
+        with _connect(context) as server:
+            server.login(sender_email, app_password)
+            for recipient in recipient_list:
+                message = EmailMessage()
+                message["To"] = recipient
+                message["From"] = sender_email
+                message["Subject"] = subject
+                message.set_content(
+                    plain_text or "This message contains an HTML report."
+                )
+                message.add_alternative(html_content, subtype="html")
 
-        for recipient in recipient_list:
-            message = EmailMessage()
-            message["To"] = recipient
-            message["From"] = sender_email
-            message["Subject"] = subject
-            message.set_content(plain_text or "This message contains an HTML report.")
-            message.add_alternative(html_content, subtype="html")
+                server.send_message(message)
+                sent_to.append(recipient)
+        return sent_to
 
-            server.send_message(message)
-            sent_to.append(recipient)
+    last_error: Exception | None = None
+    for attempt in range(1, SMTP_MAX_ATTEMPTS + 1):
+        try:
+            sent_to = _deliver()
+            break
+        except (smtplib.SMTPConnectError, smtplib.SMTPServerDisconnected, OSError) as exc:
+            last_error = exc
+            if attempt == SMTP_MAX_ATTEMPTS:
+                raise
+            delay = SMTP_RETRY_BACKOFF * attempt
+            print(
+                f"Gmail SMTP attempt {attempt}/{SMTP_MAX_ATTEMPTS} failed "
+                f"({exc}); retrying in {delay}s"
+            )
+            time.sleep(delay)
+    else:  # pragma: no cover - loop always breaks or raises
+        raise last_error if last_error else RuntimeError("Gmail SMTP send failed")
 
     return {
         "sender": sender_email,
         "recipients": sent_to,
         "count": len(sent_to),
     }
+
+
+def _connect(context: ssl.SSLContext) -> smtplib.SMTP:
+    """Open an authenticated-ready SMTP connection.
+
+    Tries STARTTLS on 587 first, then falls back to implicit TLS on 465 - a
+    busy Gmail frontend sometimes rejects one port but accepts the other.
+    """
+    try:
+        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=SMTP_TIMEOUT)
+        server.starttls(context=context)
+        return server
+    except (smtplib.SMTPConnectError, smtplib.SMTPServerDisconnected, OSError):
+        return smtplib.SMTP_SSL(
+            SMTP_HOST, SMTP_SSL_PORT, timeout=SMTP_TIMEOUT, context=context
+        )
 
 
 def gmail_setup_status() -> dict[str, object]:
