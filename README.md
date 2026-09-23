@@ -2,7 +2,7 @@
 
 ![Portfolio Analyzer dashboard illustration](assets/portfolio-dashboard.svg)
 
-A standalone Python script that monitors a personal stock watchlist, collects market context from Yahoo Finance, asks an AI model what materially changed, and optionally emails a copy-ready daily report through Gmail SMTP.
+A standalone Python script that monitors a personal stock watchlist, collects market context from Yahoo Finance, asks an AI model what materially changed, and optionally emails a copy-ready daily report through the Brevo email API.
 
 The project does not read any portfolio CSV. The watchlist is created and maintained with `--add` and `--remove`.
 
@@ -35,7 +35,8 @@ AI_PROVIDER=cline
 AI_MODEL=google/gemini-2.5-pro
 CLINE_API_KEY=your_cline_api_key_here
 GEMINI_API_KEY=your_direct_gemini_fallback_key_here
-SENDER_EMAIL=your-email@gmail.com
+SENDER_EMAIL=your-verified-sender@example.com
+BREVO_API_KEY=your_brevo_api_key_here
 RECIPIENTS=first@example.com,second@example.com
 ```
 
@@ -63,23 +64,24 @@ If Cline is selected and `CLINE_API_KEY` is missing or fails, the script tries d
 
 `SENDER_EMAIL` and `RECIPIENTS` are required only when using `--email`.
 
-## Gmail email
+## Email
 
-Email sending uses Gmail SMTP with an App Password (no OAuth, no Google Cloud project).
+Email sending uses the Brevo transactional email HTTP API (not SMTP — outbound
+SMTP is blocked on this host's network).
 
 Add to `.env`:
 
-- `SENDER_EMAIL`: the sending Gmail address
-- `GMAIL_APP_PASSWORD`: a 16-char App Password from <https://myaccount.google.com/apppasswords> (requires 2-Step Verification)
+- `SENDER_EMAIL`: a sender verified in your Brevo account
+- `BREVO_API_KEY`: an API key from <https://app.brevo.com/settings/keys/api>
 - `RECIPIENTS`: comma-separated recipient list
 
 Verify with:
 
 ```bash
-python3 authenticate_gmail.py
+python3 check_email_setup.py
 ```
 
-For the full setup flow, see [GMAIL_API_SETUP.md](GMAIL_API_SETUP.md).
+For the full setup flow, see [EMAIL_SETUP.md](EMAIL_SETUP.md).
 
 `.env` holds secrets and is ignored by Git.
 

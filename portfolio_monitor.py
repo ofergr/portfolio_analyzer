@@ -30,7 +30,7 @@ from typing import Any
 import pandas as pd
 import yfinance as yf
 from dotenv import load_dotenv
-from gmail_mailer import send_email_via_gmail_api
+from brevo_mailer import send_email_via_brevo
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -1328,7 +1328,7 @@ def run_monitor(
         html_report = build_html_report(report_payload)
         plain_text_report = build_plain_text_report(report_payload)
         subject = f"Portfolio Monitor Report - {datetime.now().strftime('%Y-%m-%d')}"
-        result = send_email_via_gmail_api(
+        result = send_email_via_brevo(
             subject=subject,
             html_content=html_report,
             plain_text=plain_text_report,
